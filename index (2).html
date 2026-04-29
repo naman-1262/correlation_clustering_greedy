@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Correlation Clustering — Greedy 3-Approximation Visualizer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #f7f6f3;
+    --bg2:     #eeecea;
+    --bg3:     #ffffff;
+    --border:  rgba(0,0,0,0.10);
+    --border2: rgba(0,0,0,0.20);
+    --text:    #181816;
+    --text2:   #56564f;
+    --text3:   #9a9a90;
+    --r:       10px;
+    --rlg:     14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:      #161614;
+      --bg2:     #222220;
+      --bg3:     #2a2a28;
+      --border:  rgba(255,255,255,0.09);
+      --border2: rgba(255,255,255,0.18);
+      --text:    #e6e4de;
+      --text2:   #9e9e96;
+      --text3:   #60605a;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--bg3);
+    border-bottom: 0.5px solid var(--border);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1   { font-size: 16px; font-weight: 600; }
+  header span { font-size: 13px; color: var(--text2); }
+  #back-btn {
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 6px 13px; border-radius: var(--r);
+    border: 0.5px solid var(--border2);
+    background: var(--bg); color: var(--text2);
+    cursor: pointer; transition: background .12s, color .12s;
+    display: flex; align-items: center; gap: 5px;
+    text-decoration: none; flex-shrink: 0;
+  }
+  #back-btn:hover { background: var(--bg2); color: var(--text); }
+
+  .wrap { max-width: 960px; margin: 0 auto; padding: 22px 24px 40px; display: flex; flex-direction: column; gap: 16px; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button {
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 8px 18px; border-radius: var(--r);
+    border: 0.5px solid var(--border2);
+    background: var(--bg3); color: var(--text);
+    cursor: pointer; transition: background .12s;
+  }
+  button:hover   { background: var(--bg2); }
+  button:active  { transform: scale(0.98); }
+  button:disabled { opacity: .38; cursor: default; transform: none; }
+  #gen-btn { border-color: #1a6fe0; color: #1a6fe0; }
+  #gen-btn:hover { background: #e8f0fe; }
+  @media (prefers-color-scheme: dark) {
+    #gen-btn { border-color: #5b9bd5; color: #5b9bd5; }
+    #gen-btn:hover { background: #1a2a3a; }
+  }
+  .chip {
+    font-size: 12px; color: var(--text2);
+    padding: 5px 11px; background: var(--bg2);
+    border-radius: var(--r); border: 0.5px solid var(--border);
+  }
+
+  .canvas-wrap {
+    border: 0.5px solid var(--border);
+    border-radius: var(--rlg);
+    overflow: hidden;
+    background: var(--bg3);
+    line-height: 0;
+  }
+  #gc { display: block; width: 100%; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; }
+  .leg-item  { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+  .leg-dot   { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .leg-solid { width: 20px; height: 2.5px; border-radius: 2px; flex-shrink: 0; }
+  .leg-dash  { width: 20px; flex-shrink: 0; border-top: 2.5px dashed; }
+
+  .metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+  .metric  { background: var(--bg2); border-radius: var(--r); padding: 12px 16px; border: 0.5px solid var(--border); }
+  .m-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .m-val   { font-size: 26px; font-weight: 600; color: var(--text); }
+
+  .log-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); margin-bottom: 8px; }
+  #log-box   { display: flex; flex-direction: column; gap: 7px; max-height: 260px; overflow-y: auto; }
+  .log-entry {
+    padding: 9px 13px; border-radius: var(--r);
+    border: 0.5px solid var(--border); border-left-width: 3px;
+    background: var(--bg3);
+  }
+  .le-info  { border-left-color: var(--text3); }
+  .le-round { border-left-color: #1a6fe0; }
+  .le-done  { border-left-color: #2e7d32; }
+  .le-tag   { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); margin-bottom: 2px; }
+  .le-msg   { font-size: 13px; color: var(--text); line-height: 1.5; }
+  .le-sub   { font-size: 12px; color: var(--text2); margin-top: 3px; line-height: 1.45; }
+</style>
+</head>
+<body>
+
+<header>
+  <button id="back-btn" onclick="history.back()">&#8592; Back</button>
+  <h1>Correlation Clustering</h1>
+  <span>Greedy 3-Approximation — Step-by-step visualizer</span>
+</header>
+
+<div class="wrap">
+
+  <div class="toolbar">
+    <button id="gen-btn">↺ Generate graph</button>
+    <button id="prev-btn" disabled>← Previous</button>
+    <button id="step-btn" disabled>Step →</button>
+    <button id="run-btn"  disabled>Run all</button>
+    <span class="chip" id="chip">No graph yet</span>
+  </div>
+
+  <div class="canvas-wrap">
+    <canvas id="gc"></canvas>
+  </div>
+
+  <div class="legend">
+    <div class="leg-item"><div class="leg-solid" style="background:#2e7d32"></div> Positive edge (+)</div>
+    <div class="leg-item"><div class="leg-dash"  style="border-color:#c62828"></div> Negative edge (−)</div>
+    <div class="leg-item"><div class="leg-dot"   style="background:#1a6fe0"></div> Pivot</div>
+    <div class="leg-item"><div class="leg-dot"   style="background:#7b1fa2"></div> Cluster member</div>
+    <div class="leg-item"><div class="leg-dot"   style="background:#aaa"></div> Unclustered</div>
+    <div class="leg-item"><div class="leg-solid" style="background:#e65100"></div> Disagreement</div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><div class="m-label">Clusters formed</div><div class="m-val" id="m-c">—</div></div>
+    <div class="metric"><div class="m-label">Disagreements</div><div class="m-val" id="m-d">—</div></div>
+    <div class="metric"><div class="m-label">Remaining</div><div class="m-val" id="m-r">—</div></div>
+  </div>
+
+  <div>
+    <div class="log-title">Algorithm log</div>
+    <div id="log-box">
+      <div class="log-entry le-info">
+        <div class="le-msg">Generate a graph to begin.</div>
+        <div class="le-sub">Use Step to run one round at a time, or Run all to finish instantly.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ── HiDPI canvas ─────────────────────────────────────────── */
+const canvas = document.getElementById('gc');
+const ctx    = canvas.getContext('2d');
+const DPR    = window.devicePixelRatio || 1;
+const CW = 900, CH = 520;
+canvas.width        = CW * DPR;
+canvas.height       = CH * DPR;
+canvas.style.width  = CW + 'px';
+canvas.style.height = CH + 'px';
+ctx.scale(DPR, DPR);
+
+const NODE_R  = 24;
+const PALETTE = [
+  '#1565c0','#2e7d32','#6a1b9a','#ad1457',
+  '#00695c','#4527a0','#558b2f','#880e4f'
+];
+
+/* G  = static graph (nodes positions + edges — never mutated)
+   history = array of snapshots; currentStep = index into history (-1 = initial) */
+let G = null;
+let history = [];   // each entry: deep-clone of S at that moment
+let currentStep = -1;
+
+function rnd(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+
+/* ── deep clone state ─────────────────────────────────────── */
+function cloneS(s){
+  return {
+    remaining:    [...s.remaining],
+    clusters:     s.clusters.map(c=>({...c, members:[...c.members]})),
+    done:         s.done,
+    disagreements:s.disagreements,
+    disKeys:      new Set(s.disKeys),
+    round:        s.round,
+    logEntries:   s.logEntries.map(e=>({...e}))
+  };
+}
+
+/* ── generate ─────────────────────────────────────────────── */
+function generateGraph(){
+  const n  = rnd(4, 7);
+  const cx = CW/2, cy = CH/2;
+  const r  = Math.min(CW, CH) * 0.34;
+
+  const nodes = Array.from({length:n}, (_,i) => {
+    const a = (2*Math.PI*i/n) - Math.PI/2;
+    return { id:i, x:cx+r*Math.cos(a), y:cy+r*Math.sin(a) };
+  });
+  const edges = [];
+  for(let i=0;i<n;i++)
+    for(let j=i+1;j<n;j++)
+      edges.push({u:i, v:j, sign: Math.random()<0.55?1:-1});
+
+  G = {n, nodes, edges};
+
+  const initS = {
+    remaining:    Array.from({length:n},(_,i)=>i),
+    clusters:     [],
+    done:         false,
+    disagreements:0,
+    disKeys:      new Set(),
+    round:        0,
+    logEntries:   [{type:'info', tag:null,
+      msg:'Graph generated: '+n+' nodes, '+edges.length+' edges.',
+      sub:'Positive: '+edges.filter(e=>e.sign===1).length
+          +'   Negative: '+edges.filter(e=>e.sign===-1).length}]
+  };
+
+  history = [cloneS(initS)];
+  currentStep = 0;
+
+  syncButtons();
+  renderFromHistory();
+}
+
+/* ── compute one greedy step from a state ─────────────────── */
+function computeStep(s){
+  if(s.done || !s.remaining.length) return null;
+  const ns     = cloneS(s);
+  const rem    = ns.remaining;
+  const remSet = new Set(rem);
+  const pivId  = rem[0];
+  const color  = PALETTE[ns.clusters.length % PALETTE.length];
+  ns.round++;
+
+  const members = [pivId];
+  G.edges.forEach(e=>{
+    if(e.sign===1){
+      if(e.u===pivId && remSet.has(e.v)) members.push(e.v);
+      if(e.v===pivId && remSet.has(e.u)) members.push(e.u);
+    }
+  });
+
+  const mSet  = new Set(members);
+  const clIdx = ns.clusters.length;
+  const newDis = [];
+
+  G.edges.forEach(e=>{
+    const uIn=mSet.has(e.u), vIn=mSet.has(e.v);
+    const uR=remSet.has(e.u), vR=remSet.has(e.v);
+    const key=e.u*1000+e.v;
+    if(e.sign===1  && uIn&&!vIn&&vR){ newDis.push({e,why:'cut +'}); ns.disKeys.add(key); }
+    if(e.sign===1  && vIn&&!uIn&&uR){ newDis.push({e,why:'cut +'}); ns.disKeys.add(key); }
+    if(e.sign===-1 && uIn&&vIn)     { newDis.push({e,why:'inside −'}); ns.disKeys.add(key); }
+  });
+
+  ns.disagreements += newDis.length;
+  ns.clusters.push({members:[...mSet], color, pivot:pivId});
+  ns.remaining = rem.filter(id=>!mSet.has(id));
+
+  const clStr  = '{'+[...mSet].join(', ')+'}';
+  const disStr = newDis.map(d=>`(${d.e.u},${d.e.v}) ${d.why}`).join('  •  ');
+  ns.logEntries.push({
+    type:'round', tag:'Round '+ns.round,
+    msg: 'Pivot = '+pivId+'   →   C'+(clIdx+1)+' = '+clStr,
+    sub: newDis.length ? newDis.length+' disagreement(s):  '+disStr : 'No new disagreements.'
+  });
+
+  if(!ns.remaining.length){
+    ns.done = true;
+    ns.logEntries.push({
+      type:'done', tag:'Complete',
+      msg:'Total disagreements: '+ns.disagreements+'   |   Clusters: '+ns.clusters.length,
+      sub:'Guarantee: dis(C) ≤ 3 · OPT'
+    });
+  }
+  return ns;
+}
+
+/* ── step forward ─────────────────────────────────────────── */
+function stepForward(){
+  if(!G) return;
+  const cur = history[currentStep];
+  if(cur.done) return;
+
+  // if we already have a future snapshot, just advance
+  if(currentStep < history.length - 1){
+    currentStep++;
+  } else {
+    const next = computeStep(cur);
+    if(!next) return;
+    history.push(next);
+    currentStep++;
+  }
+  syncButtons();
+  renderFromHistory();
+}
+
+/* ── step backward ────────────────────────────────────────── */
+function stepBackward(){
+  if(currentStep <= 0) return;
+  currentStep--;
+  syncButtons();
+  renderFromHistory();
+}
+
+/* ── run all ──────────────────────────────────────────────── */
+function runAll(){
+  if(!G) return;
+  // compute all remaining steps
+  while(true){
+    const cur = history[currentStep];
+    if(cur.done) break;
+    if(currentStep < history.length - 1){
+      currentStep++;
+    } else {
+      const next = computeStep(cur);
+      if(!next) break;
+      history.push(next);
+      currentStep++;
+    }
+  }
+  syncButtons();
+  renderFromHistory();
+}
+
+/* ── render current snapshot ──────────────────────────────── */
+function renderFromHistory(){
+  const s = history[currentStep];
+
+  // rebuild node display state from clusters
+  const nodeState = G.nodes.map(nd=>({...nd, cluster:-1, color:'#aaa', role:''}));
+  s.clusters.forEach((cl,ci)=>{
+    cl.members.forEach(id=>{
+      nodeState[id].cluster = ci;
+      nodeState[id].color   = cl.color;
+      nodeState[id].role    = id===cl.pivot ? 'pivot' : 'member';
+    });
+  });
+
+  // chip
+  if(s.done){
+    setChip('Done');
+  } else if(s.round===0){
+    setChip('Round 1 — '+s.remaining.length+' vertices remaining');
+  } else {
+    setChip('Round '+(s.round+1)+' — '+s.remaining.length+' remaining');
+  }
+
+  // metrics
+  document.getElementById('m-c').textContent = s.clusters.length || '—';
+  document.getElementById('m-d').textContent = s.disagreements !== undefined ? s.disagreements : '—';
+  document.getElementById('m-r').textContent = s.remaining.length !== undefined ? s.remaining.length : '—';
+
+  // log
+  const box = document.getElementById('log-box');
+  box.innerHTML = '';
+  s.logEntries.forEach(le => {
+    const d = document.createElement('div');
+    d.className = 'log-entry '+{info:'le-info',round:'le-round',done:'le-done'}[le.type];
+    if(le.tag){ const t=document.createElement('div'); t.className='le-tag'; t.textContent=le.tag; d.appendChild(t); }
+    const m=document.createElement('div'); m.className='le-msg'; m.textContent=le.msg; d.appendChild(m);
+    if(le.sub){ const sv=document.createElement('div'); sv.className='le-sub'; sv.textContent=le.sub; d.appendChild(sv); }
+    box.appendChild(d);
+  });
+  box.scrollTop = box.scrollHeight;
+
+  draw(s, nodeState);
+}
+
+/* ── sync button states ───────────────────────────────────── */
+function syncButtons(){
+  const hasgraph = !!G;
+  const s = hasgraph ? history[currentStep] : null;
+  document.getElementById('prev-btn').disabled  = !hasgraph || currentStep <= 0;
+  document.getElementById('step-btn').disabled  = !hasgraph || (s && s.done);
+  document.getElementById('run-btn').disabled   = !hasgraph || (s && s.done);
+}
+
+/* ── UI helpers ───────────────────────────────────────────── */
+function setChip(t){ document.getElementById('chip').textContent=t; }
+
+/* ── draw ─────────────────────────────────────────────────── */
+function draw(s, nodeState){
+  const dark = window.matchMedia('(prefers-color-scheme:dark)').matches;
+  ctx.fillStyle = dark ? '#2a2a28' : '#ffffff';
+  ctx.fillRect(0,0,CW,CH);
+  if(!G) return;
+
+  /* edges */
+  G.edges.forEach(e=>{
+    const nu=G.nodes[e.u], nv=G.nodes[e.v];
+    const key=e.u*1000+e.v;
+    const isDis = s && s.disKeys.has(key);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(nu.x, nu.y);
+    ctx.lineTo(nv.x, nv.y);
+    if(isDis){
+      ctx.strokeStyle='#e65100'; ctx.lineWidth=3.5; ctx.globalAlpha=1; ctx.setLineDash([]);
+    } else if(e.sign===1){
+      ctx.strokeStyle=dark?'#43a047':'#2e7d32'; ctx.lineWidth=2; ctx.globalAlpha=0.6; ctx.setLineDash([]);
+    } else {
+      ctx.strokeStyle=dark?'#ef5350':'#c62828'; ctx.lineWidth=1.8; ctx.globalAlpha=0.5; ctx.setLineDash([8,5]);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    if(!isDis){
+      const dx=nv.x-nu.x, dy=nv.y-nu.y;
+      if(Math.sqrt(dx*dx+dy*dy)>70){
+        const mx=(nu.x+nv.x)/2, my=(nu.y+nv.y)/2;
+        ctx.save();
+        ctx.fillStyle=dark?'#2a2a28':'#ffffff';
+        ctx.beginPath(); ctx.arc(mx,my,10,0,2*Math.PI); ctx.fill();
+        ctx.font='bold 13px sans-serif';
+        ctx.fillStyle=e.sign===1?(dark?'#66bb6a':'#2e7d32'):(dark?'#ef9a9a':'#c62828');
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(e.sign===1?'+':'−', mx, my);
+        ctx.restore();
+      }
+    }
+  });
+
+  /* nodes */
+  nodeState.forEach(nd=>{
+    const isPivot  = nd.role==='pivot';
+    const isMember = nd.role==='member';
+    const r = isPivot ? NODE_R+5 : NODE_R;
+
+    if(isPivot||isMember){
+      ctx.save();
+      ctx.beginPath(); ctx.arc(nd.x,nd.y,r+8,0,2*Math.PI);
+      ctx.fillStyle=nd.color+(isPivot?'30':'20'); ctx.fill(); ctx.restore();
+    }
+
+    ctx.save();
+    ctx.beginPath(); ctx.arc(nd.x,nd.y,r,0,2*Math.PI);
+    ctx.fillStyle  =nd.cluster>=0?nd.color:(dark?'#555':'#bbb');
+    ctx.globalAlpha=nd.cluster>=0?(isPivot?1:0.88):0.7;
+    ctx.fill(); ctx.globalAlpha=1;
+    ctx.strokeStyle=dark?'rgba(255,255,255,0.4)':'rgba(255,255,255,1)';
+    ctx.lineWidth  =isPivot?3.5:2.5; ctx.stroke(); ctx.restore();
+
+    ctx.save();
+    ctx.font=`bold ${isPivot?16:14}px sans-serif`;
+    ctx.fillStyle='#ffffff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(nd.id, nd.x, nd.y); ctx.restore();
+
+    if(isPivot){
+      ctx.save();
+      ctx.font='bold 11px sans-serif'; ctx.fillStyle=nd.color;
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillText('pivot', nd.x, nd.y+r+6); ctx.restore();
+    }
+  });
+
+  /* cluster summary top-left */
+  if(s && s.clusters.length>0){
+    let ty=12;
+    s.clusters.forEach((cl,i)=>{
+      ctx.save();
+      ctx.font='bold 13px sans-serif'; ctx.fillStyle=cl.color;
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillText('C'+(i+1)+': {'+[...cl.members].join(', ')+'}', 14, ty);
+      ty+=20; ctx.restore();
+    });
+  }
+}
+
+/* initial blank draw */
+(function(){
+  const dark = window.matchMedia('(prefers-color-scheme:dark)').matches;
+  ctx.fillStyle = dark ? '#2a2a28' : '#ffffff';
+  ctx.fillRect(0,0,CW,CH);
+})();
+
+/* ── wire up ──────────────────────────────────────────────── */
+document.getElementById('gen-btn').addEventListener('click',  generateGraph);
+document.getElementById('prev-btn').addEventListener('click', stepBackward);
+document.getElementById('step-btn').addEventListener('click', stepForward);
+document.getElementById('run-btn').addEventListener('click',  runAll);
+</script>
+</body>
+</html>
